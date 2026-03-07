@@ -36,27 +36,7 @@ public class MessageBlock extends Block{
         drawDisabled = false;
         envEnabled = Env.any;
 
-        config(String.class, (MessageBuild tile, String text) -> {
-            if(text.length() > maxTextLength || !accessible()){
-                return; //no.
-            }
-
-            tile.message.ensureCapacity(text.length());
-            tile.message.setLength(0);
-
-            text = text.trim();
-            int count = 0;
-            for(int i = 0; i < text.length(); i++){
-                char c = text.charAt(i);
-                if(c == '\n'){
-                    if(count++ <= maxNewlines){
-                        tile.message.append('\n');
-                    }
-                }else{
-                    tile.message.append(c);
-                }
-            }
-        });
+        config(String.class, MessageBuild::setMessage);
     }
 
     public boolean accessible(){
@@ -70,6 +50,24 @@ public class MessageBlock extends Block{
 
     public class MessageBuild extends Building implements LReadable{
         public StringBuilder message = new StringBuilder();
+        private String cachedMessage = "";
+
+        private void setMessage(String text) {
+            message.setLength(0);
+            text = text.trim();
+            int newlineCount = 0;
+            for(int i = 0; i < text.length(); i++){
+                char c = text.charAt(i);
+                if(c == '\n'){
+                    if(newlineCount++ < maxNewlines){
+                        message.append('\n');
+                    }
+                }else{
+                    message.append(c);
+                }
+            }
+            cachedMessage = message.toString();
+        }
 
         @Override
         public void drawSelect(){
@@ -81,7 +79,7 @@ public class MessageBlock extends Block{
             font.getData().setScale(1 / 4f / Scl.scl(1f));
             font.setUseIntegerPositions(false);
 
-            String text = message == null || message.length() == 0 ? "[lightgray]" + Core.bundle.get("empty") : UI.formatIcons(message.toString());
+            String text = message == null || message.isEmpty() ? "[lightgray]" + Core.bundle.get("empty") : UI.formatIcons(message.toString());
 
             l.setText(font, text, Color.white, 90f, Align.left, true);
             float offset = 1f;
@@ -89,7 +87,7 @@ public class MessageBlock extends Block{
             Draw.color(0f, 0f, 0f, 0.2f);
             Fill.rect(x, y - tilesize/2f - l.height/2f - offset, l.width + offset*2f, l.height + offset*2f);
             Draw.color();
-            font.setColor(message.length() == 0 ? Color.lightGray : Color.white);
+            font.setColor(message.isEmpty() ? Color.lightGray : Color.white);
             font.draw(text, x - l.width/2f, y - tilesize/2f - offset, 90f, Align.left, true);
             font.setUseIntegerPositions(ints);
 
@@ -136,7 +134,7 @@ public class MessageBlock extends Block{
                     dialog.cont.row();
                     dialog.cont.label(() -> a.getText().length() + " / " + maxTextLength).color(Color.lightGray);
                     dialog.buttons.button("@ok", () -> {
-                        if(!a.getText().equals(message.toString())) configure(a.getText());
+                        if(!a.getText().contentEquals(message)) configure(a.getText());
                         dialog.hide();
                     }).size(130f, 60f);
                     dialog.update(() -> {
@@ -186,6 +184,14 @@ public class MessageBlock extends Block{
         }
 
         @Override
+        public Object senseObject(LAccess sensor) {
+            return switch(sensor){
+                case config -> cachedMessage;
+                default -> super.senseObject(sensor);
+            };
+        }
+
+        @Override
         public void damage(float damage){
             if(privileged) return;
             super.damage(damage);
@@ -203,8 +209,7 @@ public class MessageBlock extends Block{
 
         @Override
         public void handleString(Object value){
-            message.setLength(0);
-            message.append(value);
+            setMessage(value.toString());
         }
 
         @Override
@@ -227,7 +232,7 @@ public class MessageBlock extends Block{
         @Override
         public void read(Reads read, byte revision){
             super.read(read, revision);
-            message = new StringBuilder(read.str());
+            setMessage(read.str());
         }
     }
 }
